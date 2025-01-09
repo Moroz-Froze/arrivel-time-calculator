@@ -114,9 +114,11 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
 
         # Получаем стартовые и конечные точки
         # Загрузка слоя стартовых точек
-        start_points_layer  = self.parameterAsVectorLayer(parameters, self.START_POINTS, context)
+        # start_points_layer  = self.parameterAsVectorLayer(parameters, self.START_POINTS, context)
+        start_points_layer  = self.parameterAsSource(parameters, self.START_POINTS, context)
         # Загрузка слоя конечных точек
-        target_points_layer = self.parameterAsVectorLayer(parameters, self.END_POINTS, context)
+        # target_points_layer = self.parameterAsVectorLayer(parameters, self.END_POINTS, context)
+        target_points_layer = self.parameterAsSource(parameters, self.END_POINTS, context)
 
         # Это не имеет смысла - параметры обязательные:
         # if not start_points_layer:
@@ -150,11 +152,20 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         total_routes = len(start_points_gdf) * len(target_points_gdf)
         route_count = 0
 
+        # Перебор всех точек - это неудачное решение
+        # т.к. цикл по всем точкам может занять много времени
+        # Лучше использовать функции из networkx, которые рассчитывают сразу
+        # множество маршрутов
         for sp_id, start_feature in start_points_gdf.iterrows():
             start_x, start_y = start_feature.geometry.x, start_feature.geometry.y
             start_name = start_feature['name'] if 'name' in start_points_gdf.columns else str(sp_id)
 
             for ep_id, end_feature in target_points_gdf.iterrows():
+                
+                # Останавливает выполнение алгоритма, если нажата кнопка Cancel
+                if feedback.isCanceled():
+                    break
+
                 end_x, end_y = end_feature.geometry.x, end_feature.geometry.y
                 end_name = end_feature['name'] if 'name' in target_points_gdf.columns else str(ep_id)
 
