@@ -5,6 +5,7 @@ from qgis.core import (
     QgsProcessingAlgorithm,
     QgsProcessingParameterFeatureSource,
     QgsProcessingParameterMatrix,
+    QgsProcessingParameterEnum,
     QgsProcessingParameterFileDestination,
     QgsProcessing,
     QgsProcessingParameterBoolean
@@ -23,12 +24,13 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
     Алгоритм для расчёта времени прибытия с использованием дорожной сети из OSM.
     """
 
-    INPUT = 'INPUT'
-    OUTPUT = 'OUTPUT'
-    START_POINTS = 'START_POINTS'
-    END_POINTS = 'END_POINTS'
-    SPEEDS = 'SPEEDS'
+    INPUT          = 'INPUT'
+    OUTPUT         = 'OUTPUT'
+    START_POINTS   = 'START_POINTS'
+    END_POINTS     = 'END_POINTS'
+    SPEEDS         = 'SPEEDS'
     DISPLAY_ROUTES = 'DISPLAY_ROUTES'
+    NETWORK_TYPE   = 'NETWORK_TYPE'
 
     default_speed_limits = SpeedManager.default_speed_limits  # Используем по умолчанию скорости из SpeedManager
 
@@ -64,6 +66,18 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
             # optional=True, # Пусть будет обязательным - для расчета узлов графа мы отдельный алгоритм лучше сделаем.
         ))
 
+        # Целевая метрика для оптимизации
+        self.addParameter(QgsProcessingParameterEnum(
+            self.NETWORK_TYPE,
+            self.tr('Тип улично-дорожной сети'),
+            [
+                self.tr('Вся сеть'),
+                self.tr('Только крупные дороги'),
+            ],
+            defaultValue=0
+            ))
+        
+        # Скорости следования
         self.addParameter(
             QgsProcessingParameterMatrix(
                 self.SPEEDS,
@@ -81,6 +95,7 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
             )
         )
 
+
     def processAlgorithm(self, parameters, context, feedback):
         # Проверка, включено ли отображение маршрутов
         # display_routes = self.parameterAsBoolean(parameters, self.DISPLAY_ROUTES, context)
@@ -95,17 +110,30 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         if source is None:
             raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
 
+        # Получаем тип улично-дорожной сети
+        network_type_option    = self.parameterAsEnum(parameters, self.NETWORK_TYPE, context)
+        if network_type_option == 0:
+            feedback.pushInfo('Загрузка всей улично-дорожной сети')
+            network_type = 'drive_service'
+        else:
+            feedback.pushInfo('Загрузка только крупных дорог')
+            network_type = 'drive'
+
+
         # Загрузка скоростей следования
         speed_manager = SpeedManager()
         # speed_limits = speed_manager.load_speed_limits(self.parameterAsMatrix(parameters, self.SPEEDS, context))
         # Временно сделала так - переписать нормально!
-        feedback.pushWarning('Скорости прописаны в коде!')
-        speed_limits = [49, 37, 26, 16, 5]
+        # feedback.pushWarning('Скорости прописаны в коде!')
+        # speed_limits = [49, 37, 26, 16, 5]
+        speeds            = self.parameterAsMatrix(parameters, self.SPEEDS, context)[1::2]
+        speed_limits      = [float(s) for s in speeds]
+        feedback.pushWarning(str(speed_limits))
 
 
         # Извлечение многоугольников и создание графа
         polygons = extract_polygons(source)
-        G = load_graph_from_osm(polygons, feedback)
+        G = load_graph_from_osm(polygons, feedback, network_type)
         if G is None or G.number_of_nodes() == 0:
             feedback.reportError("Граф не загружен или не содержит узлов.")
             return
