@@ -137,24 +137,15 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         if G is None or G.number_of_nodes() == 0:
             feedback.reportError("Граф не загружен или не содержит узлов.")
             return
+        
         # Установка скоростей следования времен следования для ребер графа
         speed_manager.set_graph_travel_times(G, speed_limits, morph_function=speed_manager.kmh_to_mm)
 
         # Получаем стартовые и конечные точки
         # Загрузка слоя стартовых точек
-        # start_points_layer  = self.parameterAsVectorLayer(parameters, self.START_POINTS, context)
         start_points_layer  = self.parameterAsSource(parameters, self.START_POINTS, context)
         # Загрузка слоя конечных точек
-        # target_points_layer = self.parameterAsVectorLayer(parameters, self.END_POINTS, context)
         target_points_layer = self.parameterAsSource(parameters, self.END_POINTS, context)
-
-        # Это не имеет смысла - параметры обязательные:
-        # if not start_points_layer:
-        #     feedback.reportError("Начальные точки не указаны.")
-        #     return
-        # if not start_points_layer:
-        #     feedback.reportError("Начальные точки не указаны.")
-        #     return
 
         # Получаем датасеты стартовых и конечных точек
         start_points_gdf = gpd.GeoDataFrame.from_features(list(start_points_layer.getFeatures()), crs=start_points_layer.sourceCrs().authid())
@@ -184,44 +175,87 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         # т.к. цикл по всем точкам может занять много времени
         # Лучше использовать функции из networkx, которые рассчитывают сразу
         # множество маршрутов
-        for sp_id, start_feature in start_points_gdf.iterrows():
-            start_x, start_y = start_feature.geometry.x, start_feature.geometry.y
-            start_name = start_feature['name'] if 'name' in start_points_gdf.columns else str(sp_id)
 
-            for ep_id, end_feature in target_points_gdf.iterrows():
-                
-                # Останавливает выполнение алгоритма, если нажата кнопка Cancel
-                if feedback.isCanceled():
-                    break
+        # Определяем ближайшие узлы ПСЧ
+        nearest_nodes = ox.distance.nearest_nodes(G, start_points_gdf.geometry.x, start_points_gdf.geometry.y)
+        start_points_gdf['node'] = nearest_nodes
+        start_points_nodes = set(start_points_gdf['node'])
 
-                end_x, end_y = end_feature.geometry.x, end_feature.geometry.y
-                end_name = end_feature['name'] if 'name' in target_points_gdf.columns else str(ep_id)
+        # Определяем ближайшие узлы для целевых объектов
+        nearest_nodes = ox.distance.nearest_nodes(G, target_points_gdf.geometry.x, target_points_gdf.geometry.y)
+        target_points_gdf['node'] = nearest_nodes
 
-                try:
-                    start_node = ox.distance.nearest_nodes(G, start_x, start_y)
-                    end_node = ox.distance.nearest_nodes(G, end_x, end_y)
-                    # Это не правильно - кратчайший путь не есть быстрейший!!!
-                    # ПЕРЕПИСАТЬ!!! Вместо 'length' использовать 'travel_time' устанавливаемую `set_graph_travel_times`
-                    #  и другую функцию Дейкстры из networkx
-                    # Там есть функции которые сразу рассчитывают и маршрут и время.
-                    # Читай документацию networkx!
-                    # route = nx.shortest_path(G, start_node, end_node, weight='length')
-                    # travel_time = calculate_travel_time(G, route, speed_limits)
-                    route = nx.shortest_path(G, start_node, end_node, weight='travel_time')
-                    travel_time = sum(ox.routing.route_to_gdf(G, route, weight='travel_time')['travel_time'])
+        # Рассчитываем сразу все маршруты для каждой из целей
+        for ep_id, end_feature in target_points_gdf.iterrows():
+            end_name = end_feature['name'] if 'name' in target_points_gdf.columns else str(ep_id)
 
-                    feedback.pushInfo(f'Маршрут: {start_name} → {end_name}, Время: {travel_time:.2f} минут')
+            # Расчет маршрутов
+            routes = nx.shortest_path(G,
+                              target    = end_feature['node'],
+                              weight    = 'travel_time')
+            routes = {k:v for k,v in routes.items() if k in start_points_nodes}
 
-                    # Добавление маршрута в слой, если отображение включено
-                    if display_routes:
-                        display_route(layer, route, travel_time, start_name, end_name, GU)
+            # Перебор маршрутов
+            for node, route in routes.items():
+                start_points_gdf_cur = start_points_gdf.query(f'node == @node').iloc[0]
+                start_name = start_points_gdf_cur['name'] if 'name' in start_points_gdf.columns else str(node)
 
-                except nx.NetworkXNoPath:
-                    feedback.reportError(f"Маршрут между точками {start_name} и {end_name} не найден.")
-                    continue
+                # Выбор маршрута
+                route_gdf = ox.routing.route_to_gdf(G, route)  #, weight='time')
 
+                # Расчет времени следования по данному маршруту
+                travel_time = sum(route_gdf['travel_time'])
+
+                # Печать результата расчета
+                feedback.pushInfo(f'Маршрут: {start_name} → {end_name}, Время: {travel_time:.2f} минут')
+
+                # Добавление маршрута в слой, если отображение включено
+                if display_routes:
+                    display_route(layer, route, travel_time, start_name, end_name, GU)
+
+                # Печать состояния
                 route_count += 1
                 feedback.setProgress(int((route_count / total_routes) * 100))
+
+        
+        # for sp_id, start_feature in start_points_gdf.iterrows():
+        #     start_x, start_y = start_feature.geometry.x, start_feature.geometry.y
+        #     start_name = start_feature['name'] if 'name' in start_points_gdf.columns else str(sp_id)
+
+        #     for ep_id, end_feature in target_points_gdf.iterrows():
+                
+        #         # Останавливает выполнение алгоритма, если нажата кнопка Cancel
+        #         if feedback.isCanceled():
+        #             break
+
+        #         end_x, end_y = end_feature.geometry.x, end_feature.geometry.y
+        #         end_name = end_feature['name'] if 'name' in target_points_gdf.columns else str(ep_id)
+
+        #         try:
+        #             start_node = ox.distance.nearest_nodes(G, start_x, start_y)
+        #             end_node = ox.distance.nearest_nodes(G, end_x, end_y)
+        #             # Это не правильно - кратчайший путь не есть быстрейший!!!
+        #             # ПЕРЕПИСАТЬ!!! Вместо 'length' использовать 'travel_time' устанавливаемую `set_graph_travel_times`
+        #             #  и другую функцию Дейкстры из networkx
+        #             # Там есть функции которые сразу рассчитывают и маршрут и время.
+        #             # Читай документацию networkx!
+        #             # route = nx.shortest_path(G, start_node, end_node, weight='length')
+        #             # travel_time = calculate_travel_time(G, route, speed_limits)
+        #             route = nx.shortest_path(G, start_node, end_node, weight='travel_time')
+        #             travel_time = sum(ox.routing.route_to_gdf(G, route, weight='travel_time')['travel_time'])
+
+        #             feedback.pushInfo(f'Маршрут: {start_name} → {end_name}, Время: {travel_time:.2f} минут')
+
+        #             # Добавление маршрута в слой, если отображение включено
+        #             if display_routes:
+        #                 display_route(layer, route, travel_time, start_name, end_name, GU)
+
+        #         except nx.NetworkXNoPath:
+        #             feedback.reportError(f"Маршрут между точками {start_name} и {end_name} не найден.")
+        #             continue
+
+        #         route_count += 1
+        #         feedback.setProgress(int((route_count / total_routes) * 100))
 
         # Добавляем слой с маршрутами на карту (если отображение включено)
         if display_routes and route_count > 0:
