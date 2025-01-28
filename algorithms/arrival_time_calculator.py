@@ -123,12 +123,12 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         # Загрузка скоростей следования
         speed_manager = SpeedManager()
         # speed_limits = speed_manager.load_speed_limits(self.parameterAsMatrix(parameters, self.SPEEDS, context))
-        # Временно сделала так - переписать нормально!
+        # Временно сделал так - переписать нормально!
         # feedback.pushWarning('Скорости прописаны в коде!')
         # speed_limits = [49, 37, 26, 16, 5]
         speeds            = self.parameterAsMatrix(parameters, self.SPEEDS, context)[1::2]
         speed_limits      = [float(s) for s in speeds]
-        feedback.pushWarning(str(speed_limits))
+        # feedback.pushWarning(str(speed_limits))
 
 
         # Извлечение многоугольников и создание графа
@@ -137,7 +137,7 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         if G is None or G.number_of_nodes() == 0:
             feedback.reportError("Граф не загружен или не содержит узлов.")
             return
-        
+
         # Установка скоростей следования времен следования для ребер графа
         speed_manager.set_graph_travel_times(G, speed_limits, morph_function=speed_manager.kmh_to_mm)
 
@@ -153,11 +153,11 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
 
         # Нужно очень внимательно проверять, чтобы все слои были  единой СК
         # Перепроецируем полученные датасеты в местную СК
-        start_points_gdf = ox.project_gdf(start_points_gdf)
-        target_points_gdf = ox.project_gdf(target_points_gdf)
+        start_points_gdf = ox.projection.project_gdf(start_points_gdf)
+        target_points_gdf = ox.projection.project_gdf(target_points_gdf)
 
         # Перепроецируем граф в местную СК
-        GU = G.copy()   # Неспроецированный граф
+        GU = G.copy()   # Сохраняем неспроецированный граф для отрисовки маршрутов - потом переписать!
         G = ox.project_graph(G)
 
 
@@ -171,11 +171,6 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         total_routes = len(start_points_gdf) * len(target_points_gdf)
         route_count = 0
 
-        # Перебор всех точек - это неудачное решение
-        # т.к. цикл по всем точкам может занять много времени
-        # Лучше использовать функции из networkx, которые рассчитывают сразу
-        # множество маршрутов
-
         # Определяем ближайшие узлы ПСЧ
         nearest_nodes = ox.distance.nearest_nodes(G, start_points_gdf.geometry.x, start_points_gdf.geometry.y)
         start_points_gdf['node'] = nearest_nodes
@@ -186,6 +181,7 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         target_points_gdf['node'] = nearest_nodes
 
         # Рассчитываем сразу все маршруты для каждой из целей
+        feedback.pushInfo('='*40)
         for ep_id, end_feature in target_points_gdf.iterrows():
             end_name = end_feature['name'] if 'name' in target_points_gdf.columns else str(ep_id)
 
@@ -216,52 +212,19 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
                 # Печать состояния
                 route_count += 1
                 feedback.setProgress(int((route_count / total_routes) * 100))
-
-        
-        # for sp_id, start_feature in start_points_gdf.iterrows():
-        #     start_x, start_y = start_feature.geometry.x, start_feature.geometry.y
-        #     start_name = start_feature['name'] if 'name' in start_points_gdf.columns else str(sp_id)
-
-        #     for ep_id, end_feature in target_points_gdf.iterrows():
-                
-        #         # Останавливает выполнение алгоритма, если нажата кнопка Cancel
-        #         if feedback.isCanceled():
-        #             break
-
-        #         end_x, end_y = end_feature.geometry.x, end_feature.geometry.y
-        #         end_name = end_feature['name'] if 'name' in target_points_gdf.columns else str(ep_id)
-
-        #         try:
-        #             start_node = ox.distance.nearest_nodes(G, start_x, start_y)
-        #             end_node = ox.distance.nearest_nodes(G, end_x, end_y)
-        #             # Это не правильно - кратчайший путь не есть быстрейший!!!
-        #             # ПЕРЕПИСАТЬ!!! Вместо 'length' использовать 'travel_time' устанавливаемую `set_graph_travel_times`
-        #             #  и другую функцию Дейкстры из networkx
-        #             # Там есть функции которые сразу рассчитывают и маршрут и время.
-        #             # Читай документацию networkx!
-        #             # route = nx.shortest_path(G, start_node, end_node, weight='length')
-        #             # travel_time = calculate_travel_time(G, route, speed_limits)
-        #             route = nx.shortest_path(G, start_node, end_node, weight='travel_time')
-        #             travel_time = sum(ox.routing.route_to_gdf(G, route, weight='travel_time')['travel_time'])
-
-        #             feedback.pushInfo(f'Маршрут: {start_name} → {end_name}, Время: {travel_time:.2f} минут')
-
-        #             # Добавление маршрута в слой, если отображение включено
-        #             if display_routes:
-        #                 display_route(layer, route, travel_time, start_name, end_name, GU)
-
-        #         except nx.NetworkXNoPath:
-        #             feedback.reportError(f"Маршрут между точками {start_name} и {end_name} не найден.")
-        #             continue
-
-        #         route_count += 1
-        #         feedback.setProgress(int((route_count / total_routes) * 100))
+            
+            # Окончание расчета для объекта
+            feedback.pushInfo('='*40)
 
         # Добавляем слой с маршрутами на карту (если отображение включено)
         if display_routes and route_count > 0:
             layer.updateExtents()
             QgsProject.instance().addMapLayer(layer)
-        elif route_count == 0:
+            # !!! Не создает постоянный слой! Так не должно быть !!!
+            return {self.OUTPUT: parameters[self.OUTPUT]}
+            # return {self.OUTPUT: layer}
+        
+        if route_count == 0:
             feedback.reportError("Маршруты не были рассчитаны.")
 
         return {self.OUTPUT: parameters[self.OUTPUT]}
