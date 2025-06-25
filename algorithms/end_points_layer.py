@@ -5,23 +5,30 @@ from qgis.core import (
     QgsProcessingAlgorithm,
     QgsProcessingParameterFeatureSource,
     QgsProcessingParameterMatrix,
+    QgsProcessingParameterEnum,
     QgsProcessingParameterFileDestination,
     QgsProcessing,
+    QgsVectorFileWriter,
+    QgsFields,
+    QgsField,
+    QgsFeature,
     QgsGeometry,
     QgsPointXY,
-    QgsFeature
+    QgsWkbTypes
 )
+from qgis.PyQt.QtCore import QVariant
 import osmnx as ox
 import networkx as nx
-from . .utils.speed_management import SpeedManager
-from . .utils.osm_utils import load_graph_from_osm
-from . .utils.geometry_utils import extract_polygons, calculate_travel_time
-from . .utils.layer_management import create_point_layer, display_point
-
+import geopandas as gpd
+from ..utils.speed_management import SpeedManager
+from ..utils.osm_utils import load_graph_from_osm
+from ..utils.geometry_utils import extract_polygons, calculate_travel_time
+from ..utils.layer_management import create_point_layer  # Измененная функция для создания слоя точек
 
 class EndPointsLayerAlgorithm(QgsProcessingAlgorithm):
     """
-    Алгоритм для создания слоя конечных точек.
+    Алгоритм для расчёта времени прибытия с использованием дорожной сети из OSM.
+    Результатом являются точки в местах конечных объектов с атрибутами времени прибытия.
     """
 
     INPUT = 'INPUT'
@@ -29,6 +36,7 @@ class EndPointsLayerAlgorithm(QgsProcessingAlgorithm):
     START_POINTS = 'START_POINTS'
     END_POINTS = 'END_POINTS'
     SPEEDS = 'SPEEDS'
+    NETWORK_TYPE = 'NETWORK_TYPE'
 
     default_speed_limits = SpeedManager.default_speed_limits
 
@@ -38,7 +46,7 @@ class EndPointsLayerAlgorithm(QgsProcessingAlgorithm):
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(
             self.INPUT,
-            self.tr('Границы расчётов'),
+            self.tr('Границы зоны расчёта'),
             [QgsProcessing.TypeVectorPolygon]
         ))
 
@@ -49,22 +57,34 @@ class EndPointsLayerAlgorithm(QgsProcessingAlgorithm):
         ))
 
         self.addParameter(QgsProcessingParameterFeatureSource(
-            self.START_POINTS, self.tr('Местоположение пожарного подразделения'), [QgsProcessing.TypeVectorPoint, QgsProcessing.TypeVectorPolygon],
+            self.START_POINTS, 
+            self.tr('Пожарные подразделения'), 
+            [QgsProcessing.TypeVectorPoint, QgsProcessing.TypeVectorPolygon],
         ))
 
         self.addParameter(QgsProcessingParameterFeatureSource(
-            self.END_POINTS, self.tr('Конечные точки'),
+            self.END_POINTS, 
+            self.tr('Конечные точки'),
             [QgsProcessing.TypeVectorPoint, QgsProcessing.TypeVectorPolygon],
-            optional=True,
         ))
 
+        self.addParameter(QgsProcessingParameterEnum(
+            self.NETWORK_TYPE,
+            self.tr('Тип улично-дорожной сети'),
+            [
+                self.tr('Вся сеть'),
+                self.tr('Только крупные дороги'),
+            ],
+            defaultValue=0
+        ))
+        
         self.addParameter(
             QgsProcessingParameterMatrix(
                 self.SPEEDS,
-                self.tr('Follow-up Speeds'),
+                self.tr('Скорости следования'),
                 numberRows=5,
                 hasFixedNumberRows=True,
-                headers=[self.tr('Road Type'), self.tr('Speed')],
+                headers=[self.tr('Тип дороги'), self.tr('Скорость, км/ч')],
                 defaultValue=[
                     'Городские магистрали и улицы общегородского значения', 49,
                     'Магистральные улицы районного значения', 37,
@@ -76,64 +96,138 @@ class EndPointsLayerAlgorithm(QgsProcessingAlgorithm):
         )
 
     def processAlgorithm(self, parameters, context, feedback):
-        feedback.pushInfo('Версии библиотек:')
+        feedback.pushInfo('Версия библиотек:')
         feedback.pushInfo(f'   osmnx: {ox.__version__}')
         feedback.pushInfo(f'   networkx: {nx.__version__}')
 
-        # Получение параметров
+        # Получаем слой границ
         source = self.parameterAsSource(parameters, self.INPUT, context)
         if source is None:
             raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
-        start_points = list(self.parameterAsSource(parameters, self.START_POINTS, context).getFeatures())
-        end_points = list(self.parameterAsSource(parameters, self.END_POINTS, context).getFeatures() if parameters[self.END_POINTS] else [])
-        speed_matrix = self.parameterAsMatrix(parameters, self.SPEEDS, context)
 
+        # Получаем тип улично-дорожной сети
+        network_type_option = self.parameterAsEnum(parameters, self.NETWORK_TYPE, context)
+        network_type = 'drive_service' if network_type_option == 0 else 'drive'
 
-        if not start_points:
-            raise QgsProcessingException("Начальные точки не указаны.")
+        # Загрузка скоростей следования
+        speeds = self.parameterAsMatrix(parameters, self.SPEEDS, context)[1::2]
+        speed_limits = [float(s) for s in speeds]
 
+        # Извлечение многоугольников и создание графа
         polygons = extract_polygons(source)
-        G = load_graph_from_osm(polygons, feedback)
+        G = load_graph_from_osm(polygons, feedback, network_type)
         if G is None or G.number_of_nodes() == 0:
-            raise QgsProcessingException("Граф не загружен или не содержит узлов.")
+            feedback.reportError("Граф не загружен или не содержит узлов.")
+            return
 
+        # Установка скоростей следования
         speed_manager = SpeedManager()
-        speed_limits = speed_manager.load_speed_limits(speed_matrix)
+        speed_manager.set_graph_travel_times(G, speed_limits, morph_function=speed_manager.kmh_to_mm)
 
-        layer = create_point_layer()
+        # Получаем стартовые и конечные точки
+        start_points_layer = self.parameterAsSource(parameters, self.START_POINTS, context)
+        target_points_layer = self.parameterAsSource(parameters, self.END_POINTS, context)
 
-        total_routes = len(start_points) * len(end_points)
-        route_count = 0
+        # Конвертируем в GeoDataFrame
+        start_points_gdf = gpd.GeoDataFrame.from_features(list(start_points_layer.getFeatures()), 
+                                                         crs=start_points_layer.sourceCrs().authid())
+        target_points_gdf = gpd.GeoDataFrame.from_features(list(target_points_layer.getFeatures()), 
+                                                          crs=target_points_layer.sourceCrs().authid())
 
-        for start_feature in start_points:
-            start_x, start_y = start_feature.geometry().asPoint().x(), start_feature.geometry().asPoint().y()
-            start_name = start_feature.attribute('name') if start_feature.attribute('name') else 'Unknown'
+        # Проецируем данные
+        start_points_gdf = ox.projection.project_gdf(start_points_gdf)
+        target_points_gdf = ox.projection.project_gdf(target_points_gdf)
+        G = ox.project_graph(G)
 
-            for end_feature in end_points:
-                end_x, end_y = end_feature.geometry().asPoint().x(), end_feature.geometry().asPoint().y()
-                end_name = end_feature.attribute('name') if end_feature.attribute('name') else 'Unknown'
+        # Определяем ближайшие узлы для ПСЧ и целевых объектов
+        start_points_gdf['node'] = ox.distance.nearest_nodes(G, start_points_gdf.geometry.x, start_points_gdf.geometry.y)
+        target_points_gdf['node'] = ox.distance.nearest_nodes(G, target_points_gdf.geometry.x, target_points_gdf.geometry.y)
+        
+        start_points_nodes = set(start_points_gdf['node'])
+        target_points_nodes = set(target_points_gdf['node'])
 
-                try:
-                    start_node = ox.distance.nearest_nodes(G, start_x, start_y)
-                    end_node = ox.distance.nearest_nodes(G, end_x, end_y)
-                    route = nx.shortest_path(G, start_node, end_node, weight='length')
-                    travel_time = calculate_travel_time(G, route, speed_limits)
+        # Создаем слой для точек с временем прибытия
+        fields = QgsFields()
+        fields.append(QgsField("id", QVariant.Int))
+        fields.append(QgsField("target_id", QVariant.String))
+        fields.append(QgsField("target_name", QVariant.String))
+        fields.append(QgsField("station_id", QVariant.String))
+        fields.append(QgsField("station_name", QVariant.String))
+        fields.append(QgsField("travel_time", QVariant.Double))
+        fields.append(QgsField("nearest_node", QVariant.Int))
 
-                    feedback.pushInfo(f'Маршрут: {start_name} → {end_name}, Время: {travel_time:.2f} минут')
-                    end_point_geometry = QgsGeometry.fromPointXY(QgsPointXY(end_x, end_y))
-                    display_point(layer, end_point_geometry, travel_time, start_name, end_name)
+        output_layer = create_point_layer(fields, target_points_gdf.crs.to_string())
 
-                except nx.NetworkXNoPath:
-                    feedback.reportError(f"Маршрут между точками {start_name} и {end_name} не найден.")
-                    continue
+        # Для каждой целевой точки находим минимальное время прибытия
+        feature_id = 0
+        for target_idx, target_feature in target_points_gdf.iterrows():
+            target_node = target_feature['node']
+            target_name = target_feature.get('name', str(target_idx))
+            target_id = target_feature.get('id', str(target_idx))
 
-                route_count += 1
-                feedback.setProgress(int((route_count / total_routes) * 100))
+            # Рассчитываем все маршруты до этой точки
+            routes = nx.shortest_path(G, target=target_node, weight='travel_time')
+            
+            # Фильтруем только маршруты от пожарных станций
+            station_routes = {k: v for k, v in routes.items() if k in start_points_nodes}
+            
+            if not station_routes:
+                feedback.pushWarning(f"Не найдено маршрутов до целевой точки {target_name}")
+                continue
 
-        layer.updateExtents()
-        QgsProject.instance().addMapLayer(layer)
+            # Для каждой пожарной станции создаем точку с временем прибытия
+            for node, route in station_routes.items():
+                station_info = start_points_gdf.query(f'node == @node').iloc[0]
+                station_name = station_info.get('name', str(node))
+                station_id = station_info.get('id', str(node))
 
-        return {self.OUTPUT: parameters[self.OUTPUT]}
+                # Рассчитываем время следования
+                route_gdf = ox.routing.route_to_gdf(G, route)
+                travel_time = sum(route_gdf['travel_time'])
+
+                # Создаем точку в месте целевого объекта
+                point = QgsPointXY(target_feature.geometry.x, target_feature.geometry.y)
+                feat = QgsFeature(fields)
+                feat.setId(feature_id)
+                feat.setGeometry(QgsGeometry.fromPointXY(point))
+                feat.setAttributes([
+                    feature_id,
+                    target_id,
+                    target_name,
+                    station_id,
+                    station_name,
+                    travel_time,
+                    target_node
+                ])
+                output_layer.dataProvider().addFeature(feat)
+                feature_id += 1
+
+                feedback.pushInfo(f'Точка {target_name}: время прибытия от {station_name} = {travel_time:.2f} мин')
+
+        # Сохраняем результаты
+        if feature_id == 0:
+            feedback.reportError("Не было создано ни одной точки с временем прибытия.")
+            return {self.OUTPUT: None}
+
+        output_path = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
+        options = QgsVectorFileWriter.SaveVectorOptions()
+        options.driverName = "GPKG"
+        options.layerName = "arrival_times"
+        
+        error = QgsVectorFileWriter.writeAsVectorFormatV3(
+            output_layer,
+            output_path,
+            context.transformContext(),
+            options
+        )
+        
+        if error[0] != QgsVectorFileWriter.NoError:
+            raise QgsProcessingException(f"Ошибка сохранения файла: {error[1]}")
+        
+        # Добавляем слой на карту
+        QgsProject.instance().addMapLayer(output_layer)
+        
+        return {self.OUTPUT: output_path}
 
 
     def name(self):

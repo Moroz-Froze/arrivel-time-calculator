@@ -26,16 +26,21 @@ def display_route(layer, route, travel_time, start_name, end_name, G):
     layer.updateExtents()
     layer.triggerRepaint()
 
-def create_point_layer():
-    layer_name = 'Arrival Points'
-    layer = QgsVectorLayer('Point?crs=EPSG:4326', layer_name, 'memory')
+def create_point_layer(fields, crs_string):
+    """
+    Создает точечный слой с указанными полями и системой координат
+    
+    :param fields: QgsFields - поля слоя
+    :param crs_string: str - строка CRS (например, 'EPSG:4326')
+    :return: QgsVectorLayer - созданный слой
+    """
+    layer = QgsVectorLayer(f"Point?crs={crs_string}", "Arrival Times", "memory")
     provider = layer.dataProvider()
-    provider.addAttributes([
-        QgsField("Travel Time", QVariant.Double),
-        QgsField("Start Name", QVariant.String),
-        QgsField("End Name", QVariant.String)
-    ])
+    
+    # Добавляем поля
+    provider.addAttributes(fields)
     layer.updateFields()
+    
     return layer
 
 def display_point(layer, point_geometry, travel_time, start_name, end_name):

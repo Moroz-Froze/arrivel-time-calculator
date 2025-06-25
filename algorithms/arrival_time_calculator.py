@@ -8,7 +8,7 @@ from qgis.core import (
     QgsProcessingParameterEnum,
     QgsProcessingParameterFileDestination,
     QgsProcessing,
-    QgsProcessingParameterBoolean
+    QgsVectorFileWriter
 )
 import osmnx as ox
 import networkx as nx
@@ -220,7 +220,21 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
         if display_routes and route_count > 0:
             layer.updateExtents()
             QgsProject.instance().addMapLayer(layer)
-            # !!! Не создает постоянный слой! Так не должно быть !!!
+
+            # Сохранение слоя в файл
+            output_path = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
+            options = QgsVectorFileWriter.SaveVectorOptions()
+            options.driverName = "GPKG"
+            options.layerName = "routes"
+            error = QgsVectorFileWriter.writeAsVectorFormatV3(
+                layer,
+                output_path,
+                context.transformContext(),
+                options
+            )
+            if error[0] != QgsVectorFileWriter.NoError:
+                raise QgsProcessingException(f"Ошибка сохранения файла: {error[1]}")
+            
             return {self.OUTPUT: parameters[self.OUTPUT]}
             # return {self.OUTPUT: layer}
         
@@ -250,3 +264,4 @@ class ArrivalTimeCalculatorAlgorithm(QgsProcessingAlgorithm):
             Рассчитывает время прибытия пожарных подразделений к указанным целевым точкам (или узлам графа)
             '''
         )
+    

@@ -5,15 +5,16 @@
 [general]
 name=Calculation of Arrival Time
 qgisMinimumVersion=3.0
+qgisMaximumVersion=3.99
 description=A plugin for calculating the arrival time of a fire truck between two points based on distance and speed
-version=0.1
-author=SPAA
+version=1.0
+author=SPSA
 email=morozov.v_ob-122bt@mail.ru
 
 about=A plugin for calculating the arrival time of a fire truck between two points based on distance and speed
 
-tracker=http://bugs
-repository=http://repo
+tracker=https://github.com/Moroz-Froze/arrivel-time-calculator
+repository=https://github.com/Moroz-Froze/arrivel-time-calculator
 # End of mandatory metadata
 
 # Recommended items:
@@ -25,7 +26,7 @@ hasProcessingProvider=yes
 # Tags are comma separated with spaces allowed
 tags=python
 
-homepage=http://homepage
+homepage=https://github.com/Moroz-Froze/arrivel-time-calculator
 category=Analysis
 icon=icon.png
 # experimental flag
