@@ -42,7 +42,7 @@
   <text x="888" y="106" class="h">Покрытие по рангам</text>
   <text x="840" y="140" class="t">Агрегаты: first/last/avg arrival</text>
   <text x="840" y="165" class="t">Градации качества покрытия</text>
-  <rect x="840" y="195" width="180" height="26" rx="6" fill="#93c5fd"/>
+  <rect x="840" y="195" width="230" height="26" rx="6" fill="#93c5fd"/>
   <text x="848" y="213" class="tag">all_stations_response</text>
 </svg>
 

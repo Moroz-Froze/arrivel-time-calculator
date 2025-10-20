@@ -51,7 +51,7 @@
   <line class="arrow" x1="620" y1="80" x2="700" y2="65" />
   <line class="arrow" x1="620" y1="105" x2="700" y2="175" />
   <line class="arrow" x1="620" y1="120" x2="700" y2="275" />
-  <line class="arrow" x1="700" y1="285" x2="280" y2="285" />
+  <line class="arrow" x1="700" y1="285" x2="300" y2="285" />
 </svg>
 
 

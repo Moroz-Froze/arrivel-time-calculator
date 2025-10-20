@@ -23,7 +23,7 @@
 
   <rect class="lane" x="40" y="230" width="880" height="80" rx="8"/>
   <text x="60" y="260" class="label">Ко всем станциям в радиусе времени</text>
-  <text x="60" y="282" class="muted">Порог по времени (например, 30 мин)</text>
+  <text x="60" y="282" class="muted">Порог по времени, например 30 мин</text>
   <path class="route" stroke="#ea580c" d="M460,290 C520,260 720,260 860,280"/>
 </svg>
 
