@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="340" viewBox="0 0 960 340" role="img" aria-labelledby="title desc">
+  <title id="title">Response Time Routes Modes</title>
+  <desc id="desc">Three routing modes: nearest, all, within time threshold.</desc>
+  <defs>
+    <style>
+      .lane{fill:#ffffff;stroke:#111827;stroke-width:2}
+      .label{font:600 16px Inter,Segoe UI,Arial}
+      .muted{font:400 13px Inter,Segoe UI,Arial;fill:#6b7280}
+      .route{stroke-width:3;fill:none}
+    </style>
+  </defs>
+
+  <rect class="lane" x="40" y="30" width="880" height="80" rx="8"/>
+  <text x="60" y="60" class="label">Только к ближайшей станции</text>
+  <text x="60" y="82" class="muted">Строится один маршрут: объект → ближайшая по времени станция</text>
+  <path class="route" stroke="#2563eb" d="M460,90 C520,20 700,20 820,70"/>
+
+  <rect class="lane" x="40" y="130" width="880" height="80" rx="8"/>
+  <text x="60" y="160" class="label">Ко всем станциям</text>
+  <text x="60" y="182" class="muted">Строятся маршруты ко всем доступным станциям</text>
+  <path class="route" stroke="#16a34a" d="M460,190 C540,110 700,110 820,150"/>
+  <path class="route" stroke="#16a34a" d="M460,190 C520,140 720,220 860,200"/>
+
+  <rect class="lane" x="40" y="230" width="880" height="80" rx="8"/>
+  <text x="60" y="260" class="label">Ко всем станциям в радиусе времени</text>
+  <text x="60" y="282" class="muted">Порог по времени (например, 30 мин)</text>
+  <path class="route" stroke="#ea580c" d="M460,290 C520,260 720,260 860,280"/>
+</svg>
+
+

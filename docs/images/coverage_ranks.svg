@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="260" viewBox="0 0 960 260" role="img" aria-labelledby="title desc">
+  <title id="title">Response Coverage Grading</title>
+  <desc id="desc">Grading based on first arrival time thresholds.</desc>
+  <defs>
+    <style>
+      .box{fill:#fff;stroke:#111827;stroke-width:2}
+      .title{font:600 16px Inter,Segoe UI,Arial}
+      .text{font:400 14px Inter,Segoe UI,Arial}
+    </style>
+  </defs>
+
+  <rect class="box" x="40" y="30" width="880" height="60" rx="8"/>
+  <text x="60" y="60" class="title">Критерии покрытия (first_arrival_min)</text>
+
+  <rect class="box" x="40" y="110" width="200" height="80" rx="8"/>
+  <text x="60" y="150" class="text">≤ 5 мин — Отличное</text>
+
+  <rect class="box" x="260" y="110" width="200" height="80" rx="8"/>
+  <text x="280" y="150" class="text">≤ 10 мин — Хорошее</text>
+
+  <rect class="box" x="480" y="110" width="200" height="80" rx="8"/>
+  <text x="500" y="150" class="text">≤ 20 мин — Удовлетворительное</text>
+
+  <rect class="box" x="700" y="110" width="220" height="80" rx="8"/>
+  <text x="720" y="150" class="text">> 20 мин — Неудовлетворительное</text>
+</svg>
+
+

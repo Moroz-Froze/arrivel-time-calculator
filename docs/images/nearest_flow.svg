@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">Nearest Fire Station Algorithm Flow</title>
+  <desc id="desc">Flowchart of steps used to compute nearest station by travel time.</desc>
+  <defs>
+    <style>
+      .box{fill:#fff;stroke:#111827;stroke-width:2}
+      .title{font:600 16px Inter,Segoe UI,Arial}
+      .text{font:400 14px Inter,Segoe UI,Arial}
+      .arrow{stroke:#111827;stroke-width:2;marker-end:url(#a)}
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111827"/>
+    </marker>
+  </defs>
+
+  <rect class="box" x="60" y="40" width="320" height="70" rx="8"/>
+  <text x="80" y="72" class="title">Старт</text>
+  <text x="80" y="94" class="text">Вход: слои объектов и станций</text>
+
+  <rect class="box" x="60" y="140" width="420" height="84" rx="8"/>
+  <text x="80" y="172" class="title">Построить граф OSM</text>
+  <text x="80" y="194" class="text">Экстент слоёв + буфер → graph_from_polygon; назначить travel_time</text>
+
+  <rect class="box" x="60" y="250" width="480" height="110" rx="8"/>
+  <text x="80" y="282" class="title">Для каждого объекта</text>
+  <text x="80" y="304" class="text">Найти ближайший узел графа; для каждой станции — кратчайший путь по времени</text>
+
+  <rect class="box" x="60" y="380" width="420" height="84" rx="8"/>
+  <text x="80" y="412" class="title">Итог</text>
+  <text x="80" y="434" class="text">Выбрать станцию с минимальным временем; записать атрибуты</text>
+
+  <line class="arrow" x1="220" y1="110" x2="220" y2="140"/>
+  <line class="arrow" x1="260" y1="224" x2="260" y2="250"/>
+  <line class="arrow" x1="260" y1="360" x2="260" y2="380"/>
+</svg>
+
+
