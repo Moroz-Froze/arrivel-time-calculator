@@ -19,7 +19,8 @@
 
   <rect class="box" x="60" y="140" width="420" height="84" rx="8"/>
   <text x="80" y="172" class="title">Построить граф OSM</text>
-  <text x="80" y="194" class="text">Экстент слоёв + буфер → graph_from_polygon; назначить travel_time</text>
+  <text x="80" y="194" class="text">Экстент слоёв + буфер → graph_from_polygon;</text>
+  <text x="80" y="214" class="text">назначить travel_time</text>
 
   <rect class="box" x="60" y="250" width="520" height="110" rx="8"/>
   <text x="80" y="282" class="title">Для каждого объекта</text>
@@ -28,9 +29,10 @@
   </text>
   <text x="80" y="324" class="text">кратчайший путь по времени</text>
 
-  <rect class="box" x="60" y="380" width="420" height="84" rx="8"/>
+  <rect class="box" x="60" y="380" width="460" height="100" rx="8"/>
   <text x="80" y="412" class="title">Итог</text>
-  <text x="80" y="434" class="text">Выбрать станцию с минимальным временем; записать атрибуты</text>
+  <text x="80" y="434" class="text">Выбрать станцию с минимальным временем;</text>
+  <text x="80" y="454" class="text">записать атрибуты результата</text>
 
   <line class="arrow" x1="220" y1="110" x2="220" y2="140"/>
   <line class="arrow" x1="260" y1="224" x2="260" y2="250"/>
