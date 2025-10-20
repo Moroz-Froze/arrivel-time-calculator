@@ -1,12 +1,27 @@
 ## Fire Response Time Analysis (QGIS Plugin)
 
+<p align="center">
+  <img src="docs/images/hero_fire.svg" alt="Fire Response — Hero" width="100%" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/Moroz-Froze/arrivel-time-calculator" target="_blank">
+    <img src="docs/images/btn_download.svg" alt="Download" />
+  </a>
+  &nbsp;
+  <a href="#использование">
+    <img src="docs/images/btn_docs.svg" alt="Docs" />
+  </a>
+  &nbsp;
+  <a href="https://github.com/Moroz-Froze/arrivel-time-calculator/issues" target="_blank">
+    <img src="docs/images/btn_issues.svg" alt="Issues" />
+  </a>
+</p>
+
 Плагин для QGIS 3.x для анализа времени прибытия пожарных подразделений: определение ближайшей части по времени, построение маршрутов по графу OSM и оценка покрытия по рангам пожара.
 
 <p align="center">
-  <img src="docs/images/overview.svg" alt="Общая схема работы плагина" width="820" />
-  <br/>
-  <sub>Общая схема: входные слои → OSM‑граф → алгоритмы → выходные слои</sub>
-  
+  <img src="docs/images/feature_cards.svg" alt="Ключевые возможности" width="100%" />
 </p>
 
 ### Возможности
@@ -37,6 +52,12 @@
 - Скорости по умолчанию заданы для групп `highway`‑тегов (см. таблицу ниже).
 
 </details>
+
+<p align="center">
+  <img src="docs/images/overview.svg" alt="Общая схема работы плагина" width="860" />
+  <br/>
+  <sub>Входные слои → OSM‑граф → алгоритмы → выходные слои</sub>
+</p>
 
 ### Требования
 - QGIS: 3.16 – 3.99
@@ -70,6 +91,10 @@ python -m pip install "osmnx>=1.4,<2.0" "networkx>=2.6,<3.0"
    - `Средние скорости/Профиль скоростей` — опционально, иначе используются значения по умолчанию.
    - Для маршрутов: выберите режим и при необходимости порог времени.
 4) Сохраните выходной слой (точечный/полигональный для ближайшей станции; линейный для маршрутов; тип геометрии как у объектов — для анализа всех подразделений).
+
+<p align="center">
+  <img src="docs/images/steps_pipeline.svg" alt="Шаги выполнения" width="100%" />
+</p>
 
 #### Режимы построения маршрутов
 <p>

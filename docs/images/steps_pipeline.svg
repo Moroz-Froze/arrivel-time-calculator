@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="220" viewBox="0 0 1200 220" role="img" aria-labelledby="title desc">
+  <title id="title">Steps Pipeline</title>
+  <desc id="desc">Three steps: Load layers, Run algorithm, Analyze outputs.</desc>
+  <defs>
+    <style>
+      .b{fill:#0b1020;stroke:#1f2937;stroke-width:1}
+      .h{font:600 16px Inter,Segoe UI,Arial;fill:#e5e7eb}
+      .t{font:400 13px Inter,Segoe UI,Arial;fill:#94a3b8}
+      .a{stroke:#e5e7eb;stroke-width:2;marker-end:url(#m)}
+    </style>
+    <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#e5e7eb"/>
+    </marker>
+  </defs>
+  <rect class="b" x="60" y="50" width="300" height="120" rx="10"/>
+  <text x="80" y="90" class="h">1. Загрузите слои</text>
+  <text x="80" y="116" class="t">Объекты и пожарные подразделения</text>
+
+  <rect class="b" x="450" y="50" width="300" height="120" rx="10"/>
+  <text x="470" y="90" class="h">2. Запустите алгоритм</text>
+  <text x="470" y="116" class="t">Processing → Fire Response Analysis</text>
+
+  <rect class="b" x="840" y="50" width="300" height="120" rx="10"/>
+  <text x="860" y="90" class="h">3. Анализируйте результат</text>
+  <text x="860" y="116" class="t">Атрибуты, маршруты, покрытие</text>
+
+  <line class="a" x1="360" y1="110" x2="450" y2="110"/>
+  <line class="a" x1="750" y1="110" x2="840" y2="110"/>
+</svg>
+
+

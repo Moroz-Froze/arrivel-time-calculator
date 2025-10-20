@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Feature Cards</title>
+  <desc id="desc">Three feature cards for plugin capabilities with fire theme.</desc>
+  <defs>
+    <style>
+      .card{fill:#0f172a;stroke:#1f2937;stroke-width:1}
+      .h{font:600 18px Inter,Segoe UI,Arial;fill:#e5e7eb}
+      .t{font:400 14px Inter,Segoe UI,Arial;fill:#94a3b8}
+      .tag{font:600 12px Inter,Segoe UI,Arial;fill:#0f172a}
+    </style>
+    <linearGradient id="c1" x1="0" x2="1">
+      <stop offset="0" stop-color="#ef4444"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <linearGradient id="c2" x1="0" x2="1">
+      <stop offset="0" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#16a34a"/>
+    </linearGradient>
+    <linearGradient id="c3" x1="0" x2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect class="card" x="60" y="60" width="320" height="220" rx="12"/>
+  <circle cx="96" cy="100" r="18" fill="url(#c1)"/>
+  <text x="128" y="106" class="h">Ближайшая станция</text>
+  <text x="80" y="140" class="t">Поиск по минимальному времени на OSM‑графе</text>
+  <text x="80" y="165" class="t">Атрибуты: название, расстояние, время</text>
+  <rect x="80" y="195" width="140" height="26" rx="6" fill="#fca5a5"/>
+  <text x="90" y="213" class="tag">nearest_fire_station</text>
+
+  <rect class="card" x="440" y="60" width="320" height="220" rx="12"/>
+  <circle cx="476" cy="100" r="18" fill="url(#c2)"/>
+  <text x="508" y="106" class="h">Маршруты прибытия</text>
+  <text x="460" y="140" class="t">Режимы: nearest / all / threshold</text>
+  <text x="460" y="165" class="t">Линейные геометрии c метриками</text>
+  <rect x="460" y="195" width="170" height="26" rx="6" fill="#86efac"/>
+  <text x="468" y="213" class="tag">response_time_routes</text>
+
+  <rect class="card" x="820" y="60" width="320" height="220" rx="12"/>
+  <circle cx="856" cy="100" r="18" fill="url(#c3)"/>
+  <text x="888" y="106" class="h">Покрытие по рангам</text>
+  <text x="840" y="140" class="t">Агрегаты: first/last/avg arrival</text>
+  <text x="840" y="165" class="t">Градации качества покрытия</text>
+  <rect x="840" y="195" width="180" height="26" rx="6" fill="#93c5fd"/>
+  <text x="848" y="213" class="tag">all_stations_response</text>
+</svg>
+
+
