@@ -1,3 +1,4 @@
+[![English](https://img.shields.io/badge/language-English-blue)](README.md)
 ## Fire Response Time Analysis (QGIS Plugin)
 
 <p align="center">
