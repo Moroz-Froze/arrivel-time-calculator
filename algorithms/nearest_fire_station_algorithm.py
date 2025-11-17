@@ -9,6 +9,7 @@ from qgis.core import (QgsProcessingAlgorithm, QgsProcessingParameterVectorLayer
                        QgsDistanceArea, QgsProject, QgsUnitTypes, QgsProcessingException,
                        QgsField, QgsFields, QgsWkbTypes, QgsRectangle, QgsProcessing)
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
+from qgis.PyQt.QtGui import QIcon
 from ..graph_utils import (
     build_graph_for_layers,
     set_graph_travel_times,
@@ -48,6 +49,12 @@ class NearestFireStationAlgorithm(QgsProcessingAlgorithm):
     def displayName(self):
         """Отображаемое имя алгоритма"""
         return self.tr('Ближайшее пожарное подразделение')
+
+    def icon(self):
+        """Иконка алгоритма для панели инструментов Processing"""
+        # Иконки лежат в корне плагина рядом с icon.png
+        plugin_root = os.path.dirname(os.path.dirname(__file__))
+        return QIcon(os.path.join(plugin_root, 'icons', 'nearest_fire_station_algorithm_icon.png'))
 
     def group(self):
         """Группа алгоритма"""

@@ -27,7 +27,7 @@ class FireResponseAnalysisProvider(QgsProcessingProvider):
 
     def icon(self):
         """Иконка провайдера"""
-        return QIcon(os.path.join(os.path.dirname(__file__), 'icon.png'))
+        return QIcon(os.path.join(os.path.dirname(__file__), 'icons', 'icon.png'))
 
     def longName(self):
         """Полное название провайдера"""

@@ -9,8 +9,10 @@ from qgis.core import (QgsProcessingAlgorithm, QgsProcessingParameterVectorLayer
                        QgsPointXY, QgsDistanceArea, QgsProject, QgsUnitTypes, 
                        QgsProcessingException, QgsField, QgsFields, QgsWkbTypes, QgsProcessing)
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
+from qgis.PyQt.QtGui import QIcon
 import math
 import importlib
+import os
 
 from ..graph_utils import (
     build_graph_for_layers,
@@ -50,6 +52,11 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
     def displayName(self):
         """Отображаемое имя алгоритма"""
         return self.tr('Анализ времени прибытия всех подразделений')
+
+    def icon(self):
+        """Иконка алгоритма для панели инструментов Processing"""
+        plugin_root = os.path.dirname(os.path.dirname(__file__))
+        return QIcon(os.path.join(plugin_root, 'icons', 'all_stations_response_algorithm_icon.png'))
 
     def group(self):
         """Группа алгоритма"""

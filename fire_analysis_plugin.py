@@ -43,7 +43,7 @@ class FireAnalysisPlugin:
         
         # Создание действия для панели инструментов
         self.action = QAction(
-            QIcon(os.path.join(self.plugin_dir, 'icon.png')),
+            QIcon(os.path.join(self.plugin_dir, 'icons', 'icon.png')),
             u"Fire Response Analysis",
             self.iface.mainWindow())
         
