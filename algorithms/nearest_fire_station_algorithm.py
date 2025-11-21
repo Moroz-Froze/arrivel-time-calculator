@@ -4,7 +4,7 @@
 
 from qgis.core import (QgsProcessingAlgorithm, QgsProcessingParameterVectorLayer,
                        QgsProcessingParameterField, QgsProcessingParameterNumber,
-                       QgsProcessingParameterFeatureSink, QgsProcessingOutputVectorLayer,
+                       QgsProcessingParameterFeatureSink, QgsProcessingParameterEnum,
                        QgsFeature, QgsGeometry, QgsPointXY, QgsSpatialIndex,
                        QgsDistanceArea, QgsProject, QgsUnitTypes, QgsProcessingException,
                        QgsField, QgsFields, QgsWkbTypes, QgsRectangle, QgsProcessing)
@@ -15,6 +15,7 @@ from ..graph_utils import (
     set_graph_travel_times,
     kmh_to_mm,
     DEFAULT_SPEEDS_KMH,
+    find_nearest_node,
 )
 import os
 import importlib
@@ -32,6 +33,7 @@ class NearestFireStationAlgorithm(QgsProcessingAlgorithm):
     FIRE_STATIONS_LAYER = 'FIRE_STATIONS_LAYER'
     RESPONSE_TIME_FIELD = 'RESPONSE_TIME_FIELD'
     ROAD_SPEEDS_KMH = 'ROAD_SPEEDS_KMH'
+    USE_CACHE = 'USE_CACHE'
     OUTPUT_LAYER = 'OUTPUT_LAYER'
 
     def tr(self, string):
@@ -97,7 +99,17 @@ class NearestFireStationAlgorithm(QgsProcessingAlgorithm):
         # Средняя скорость движения (км/ч)
         # Скорости по типам дорог передаются из диалога списком из 5 значений (км/ч)
 
-        # Выходной слой
+        # Использование кеша графа
+        self.addParameter(
+            QgsProcessingParameterEnum(
+                self.USE_CACHE,
+                self.tr('Использовать кеширование графа'),
+                options=[self.tr('Да'), self.tr('Нет')],
+                defaultValue=0
+            )
+        )
+
+        # Выходной слой (должен быть последним)
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT_LAYER,
@@ -137,6 +149,9 @@ class NearestFireStationAlgorithm(QgsProcessingAlgorithm):
         if sink is None:
             raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT_LAYER))
 
+        # Получение параметра кеширования
+        use_cache = self.parameterAsInt(parameters, self.USE_CACHE, context) == 0
+        
         # Построение графа дорог OSM
         try:
             # Проверка наличия osmnx
@@ -146,7 +161,12 @@ class NearestFireStationAlgorithm(QgsProcessingAlgorithm):
             raise QgsProcessingException(self.tr(f"OSMnx недоступен: {str(e)}"))
 
         feedback.pushInfo(self.tr('Построение графа дорог OSM...'))
-        G, to_wgs, from_wgs = build_graph_for_layers(objects_layer, fire_stations_layer)
+        
+        G, to_wgs, from_wgs = build_graph_for_layers(
+            objects_layer, 
+            fire_stations_layer,
+            use_cache=use_cache
+        )
         set_graph_travel_times(G, speeds_kmh, kmh_to_mm)
 
         # Обработка каждого объекта
@@ -204,9 +224,10 @@ class NearestFireStationAlgorithm(QgsProcessingAlgorithm):
 
             # Узел графа для объекта
             obj_wgs = to_wgs.transform(obj_point.x(), obj_point.y())
-            from osmnx.distance import nearest_nodes
             try:
-                obj_node = nearest_nodes(G, obj_wgs.x(), obj_wgs.y())
+                obj_node = find_nearest_node(G, obj_wgs.x(), obj_wgs.y())
+                if obj_node is None:
+                    continue
             except Exception:
                 continue
 
@@ -214,7 +235,9 @@ class NearestFireStationAlgorithm(QgsProcessingAlgorithm):
                 station_point = station_feature.geometry().asPoint()
                 st_wgs = to_wgs.transform(station_point.x(), station_point.y())
                 try:
-                    st_node = nearest_nodes(G, st_wgs.x(), st_wgs.y())
+                    st_node = find_nearest_node(G, st_wgs.x(), st_wgs.y())
+                    if st_node is None:
+                        continue
                 except Exception:
                     continue
 

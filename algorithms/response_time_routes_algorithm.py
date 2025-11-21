@@ -19,6 +19,7 @@ from ..graph_utils import (
     set_graph_travel_times,
     kmh_to_mm,
     DEFAULT_SPEEDS_KMH,
+    find_nearest_node,
 )
 
 
@@ -32,6 +33,7 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
     OBJECTS_LAYER = 'OBJECTS_LAYER'
     FIRE_STATIONS_LAYER = 'FIRE_STATIONS_LAYER'
     ROAD_SPEEDS_KMH = 'ROAD_SPEEDS_KMH'
+    USE_CACHE = 'USE_CACHE'
     ROUTE_TYPE = 'ROUTE_TYPE'
     TIME_THRESHOLD = 'TIME_THRESHOLD'
     OUTPUT_LAYER = 'OUTPUT_LAYER'
@@ -97,6 +99,16 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
 
         # Средняя скорость движения (км/ч)
         # Скорости по типам дорог приходят списком из 5 значений (км/ч) из диалога
+
+        # Использование кеша графа
+        self.addParameter(
+            QgsProcessingParameterEnum(
+                self.USE_CACHE,
+                self.tr('Использовать кеширование графа'),
+                options=[self.tr('Да'), self.tr('Нет')],
+                defaultValue=0
+            )
+        )
 
         # Тип маршрутов
         self.addParameter(
@@ -166,6 +178,9 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
         if sink is None:
             raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT_LAYER))
 
+        # Получение параметра кеширования
+        use_cache = self.parameterAsInt(parameters, self.USE_CACHE, context) == 0
+        
         # Построение графа OSM и установка скоростей
         try:
             importlib.import_module('osmnx')
@@ -173,7 +188,13 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
         except Exception as e:
             raise QgsProcessingException(self.tr(f"OSMnx недоступен: {str(e)}"))
 
-        G, to_wgs, from_wgs = build_graph_for_layers(objects_layer, fire_stations_layer)
+        feedback.pushInfo(self.tr('Построение графа дорог OSM...'))
+
+        G, to_wgs, from_wgs = build_graph_for_layers(
+            objects_layer, 
+            fire_stations_layer,
+            use_cache=use_cache
+        )
         set_graph_travel_times(G, speeds_kmh, kmh_to_mm)
 
         # Подготовка данных станций
@@ -184,7 +205,6 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
         total_features = objects_layer.featureCount()
         feedback.pushInfo(self.tr(f'Обработка {total_features} объектов...'))
 
-        from osmnx.distance import nearest_nodes
         import networkx as nx
 
         def sum_route_time_and_length(graph, route_nodes):
@@ -235,7 +255,9 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
             # Поиск узла графа для объекта
             obj_wgs = to_wgs.transform(obj_point.x(), obj_point.y())
             try:
-                obj_node = nearest_nodes(G, obj_wgs.x(), obj_wgs.y())
+                obj_node = find_nearest_node(G, obj_wgs.x(), obj_wgs.y())
+                if obj_node is None:
+                    continue
             except Exception:
                 continue
 
@@ -244,7 +266,9 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
                 st_pt = station_feature.geometry().asPoint()
                 st_wgs = to_wgs.transform(st_pt.x(), st_pt.y())
                 try:
-                    st_node = nearest_nodes(G, st_wgs.x(), st_wgs.y())
+                    st_node = find_nearest_node(G, st_wgs.x(), st_wgs.y())
+                    if st_node is None:
+                        return None, float('inf'), float('inf')
                     route_nodes = nx.shortest_path(G, obj_node, st_node, weight='travel_time')
                     t_min, total_len = sum_route_time_and_length(G, route_nodes)
                     return route_nodes, t_min, total_len

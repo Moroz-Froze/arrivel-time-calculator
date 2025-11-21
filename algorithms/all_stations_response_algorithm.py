@@ -19,6 +19,7 @@ from ..graph_utils import (
     set_graph_travel_times,
     kmh_to_mm,
     DEFAULT_SPEEDS_KMH,
+    find_nearest_node,
 )
 
 
@@ -33,8 +34,7 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
     FIRE_STATIONS_LAYER = 'FIRE_STATIONS_LAYER'
     STATION_NAME_FIELD = 'STATION_NAME_FIELD'  # больше не параметр, используется для ключа выхода
     ROAD_SPEEDS_KMH = 'ROAD_SPEEDS_KMH'
-    FIRE_RANK = 'FIRE_RANK'
-    MAX_STATIONS = 'MAX_STATIONS'
+    USE_CACHE = 'USE_CACHE'
     OUTPUT_LAYER = 'OUTPUT_LAYER'
 
     def tr(self, string):
@@ -70,7 +70,9 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
         """Краткая справка"""
         return self.tr(
             "Этот алгоритм создает слой с анализом времени прибытия всех подразделений "
-            "с учетом различных рангов пожара и количества выезжающих подразделений."
+            "с учетом всех рангов пожара одновременно. Рассчитываются все ранги: "
+            "1 ранг (1 подразделение), 1-бис (2 подразделения), 2 ранг (3 подразделения), "
+            "3 ранг (4 подразделения), 4 ранг (5 подразделений), 5 ранг (6 подразделений)."
         )
 
     def initAlgorithm(self, config=None):
@@ -101,31 +103,17 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
         # Средняя скорость движения (км/ч)
         # Скорости по типам дорог приходят списком из 5 значений (км/ч) из диалога
 
-        # Ранг пожара
+        # Использование кеша графа
         self.addParameter(
             QgsProcessingParameterEnum(
-                self.FIRE_RANK,
-                self.tr('Ранг пожара'),
-                options=[self.tr('1-й ранг (1-2 подразделения)'),
-                        self.tr('2-й ранг (3-4 подразделения)'),
-                        self.tr('3-й ранг (5-6 подразделений)'),
-                        self.tr('4-й ранг (7-8 подразделений)'),
-                        self.tr('5-й ранг (9+ подразделений)')],
-                defaultValue=1
+                self.USE_CACHE,
+                self.tr('Использовать кеширование графа'),
+                options=[self.tr('Да'), self.tr('Нет')],
+                defaultValue=0
             )
         )
 
-        # Максимальное количество подразделений
-        self.addParameter(
-            QgsProcessingParameterNumber(
-                self.MAX_STATIONS,
-                self.tr('Максимальное количество подразделений'),
-                type=QgsProcessingParameterNumber.Integer,
-                minValue=1,
-                maxValue=20,
-                defaultValue=6
-            )
-        )
+        # Примечание: Алгоритм рассчитывает все ранги пожара одновременно
 
         # Выходной слой
         self.addParameter(
@@ -136,17 +124,14 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
         )
 
     def processAlgorithm(self, parameters, context, feedback):
-        """Основная логика обработки"""
+        """Основная логика обработки с использованием матрицы времени прибытия для всех рангов"""
         
         # Получение параметров
         objects_layer = self.parameterAsVectorLayer(parameters, self.OBJECTS_LAYER, context)
         fire_stations_layer = self.parameterAsVectorLayer(parameters, self.FIRE_STATIONS_LAYER, context)
-        station_name_field = self._detect_station_name_field(fire_stations_layer)
         speeds_kmh = parameters.get(self.ROAD_SPEEDS_KMH, DEFAULT_SPEEDS_KMH)
         if not isinstance(speeds_kmh, list) or len(speeds_kmh) != 5:
             speeds_kmh = DEFAULT_SPEEDS_KMH
-        fire_rank = self.parameterAsInt(parameters, self.FIRE_RANK, context)
-        max_stations = self.parameterAsInt(parameters, self.MAX_STATIONS, context)
 
         if objects_layer is None:
             raise QgsProcessingException(self.invalidSourceError(parameters, self.OBJECTS_LAYER))
@@ -154,27 +139,31 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
         if fire_stations_layer is None:
             raise QgsProcessingException(self.invalidSourceError(parameters, self.FIRE_STATIONS_LAYER))
 
-        # Определение количества подразделений по рангу
-        stations_by_rank = {
-            0: min(2, max_stations),    # 1-й ранг
-            1: min(4, max_stations),    # 2-й ранг
-            2: min(6, max_stations),    # 3-й ранг
-            3: min(8, max_stations),    # 4-й ранг
-            4: max_stations             # 5-й ранг
+        # Определение количества подразделений по рангу (согласно требованиям пользователя)
+        fire_ranks = {
+            "1 ранг": 1,      # 1 подразделение
+            "1-бис": 2,       # 2 подразделения
+            "2 ранг": 3,      # 3 подразделения
+            "3 ранг": 4,      # 4 подразделения
+            "4 ранг": 5,      # 5 подразделений
+            "5 ранг": 6       # 6 подразделений
         }
-        
-        required_stations = stations_by_rank[fire_rank]
 
-        # Создание полей выходного слоя
+        # Создание полей выходного слоя для всех рангов
         fields = QgsFields()
         fields.append(QgsField('object_id', QVariant.Int))
-        fields.append(QgsField('fire_rank', QVariant.Int))
-        fields.append(QgsField('total_stations', QVariant.Int))
-        fields.append(QgsField('first_arrival_min', QVariant.Double))
-        fields.append(QgsField('last_arrival_min', QVariant.Double))
-        fields.append(QgsField('avg_arrival_min', QVariant.Double))
-        fields.append(QgsField('station_list', QVariant.String))
-        fields.append(QgsField('response_coverage', QVariant.String))
+        
+        # Добавляем поля для каждого ранга
+        for rank_name in fire_ranks.keys():
+            fields.append(QgsField(f'{rank_name}_min', QVariant.Double))  # Минимальное время прибытия
+            fields.append(QgsField(f'{rank_name}_max', QVariant.Double))  # Максимальное время прибытия
+            fields.append(QgsField(f'{rank_name}_avg', QVariant.Double))  # Среднее время прибытия
+        
+        # Общие поля
+        fields.append(QgsField('arrival_time_mean', QVariant.Double))  # Среднее по всем рангам
+        fields.append(QgsField('arrival_time_max', QVariant.Double))  # Максимальное по всем рангам
+        fields.append(QgsField('arrival_time_min', QVariant.Double))  # Минимальное по всем рангам
+        fields.append(QgsField('evaluation', QVariant.String))  # Оценка по среднему времени прибытия
 
         (sink, dest_id) = self.parameterAsSink(
             parameters, self.OUTPUT_LAYER, context,
@@ -191,51 +180,50 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
         except Exception as e:
             raise QgsProcessingException(self.tr(f"OSMnx недоступен: {str(e)}"))
 
-        G, to_wgs, from_wgs = build_graph_for_layers(objects_layer, fire_stations_layer)
+        # Получение параметра кеширования
+        use_cache = self.parameterAsInt(parameters, self.USE_CACHE, context) == 0
+        
+        feedback.pushInfo(self.tr('Построение графа дорог OSM...'))
+        
+        G, to_wgs, from_wgs = build_graph_for_layers(
+            objects_layer, 
+            fire_stations_layer,
+            use_cache=use_cache
+        )
         set_graph_travel_times(G, speeds_kmh, kmh_to_mm)
 
         station_name_field = self._detect_station_name_field(fire_stations_layer)
         fire_stations = list(fire_stations_layer.getFeatures())
 
-        # Обработка каждого объекта
-        total_features = objects_layer.featureCount()
-        feedback.pushInfo(self.tr(f'Обработка {total_features} объектов...'))
-
-        from osmnx.distance import nearest_nodes
         import networkx as nx
 
-        def sum_route_time_and_length(graph, route_nodes):
-            total_time = 0.0
-            total_len = 0.0
-            for u, v in zip(route_nodes[:-1], route_nodes[1:]):
-                data = graph.get_edge_data(u, v)
-                if not data:
+        # Шаг 1: Нахождение узлов графа для всех пожарных станций
+        feedback.pushInfo(self.tr('Определение узлов графа для пожарных подразделений...'))
+        station_nodes = {}
+        
+        for station in fire_stations:
+            st_pt = station.geometry().asPoint()
+            st_wgs = to_wgs.transform(st_pt.x(), st_pt.y())
+            try:
+                st_node = find_nearest_node(G, st_wgs.x(), st_wgs.y())
+                if st_node is None:
+                    feedback.reportError(self.tr(f'Не удалось найти узел для станции {station.id()}: узел не найден'))
                     continue
-                best_edge = None
-                best_time = float('inf')
-                for _, ed in data.items():
-                    t = ed.get('travel_time')
-                    if t is None:
-                        continue
-                    if t < best_time:
-                        best_time = t
-                        best_edge = ed
-                if best_edge is None:
-                    ed = next(iter(data.values()))
-                    t = ed.get('travel_time') or 0.0
-                    l = ed.get('length') or 0.0
-                else:
-                    t = best_time
-                    l = best_edge.get('length') or 0.0
-                total_time += t
-                total_len += l
-            return total_time, total_len
+                station_name = station[station_name_field] if station_name_field else f"Station_{station.id()}"
+                station_nodes[station_name] = st_node
+            except Exception as e:
+                feedback.reportError(self.tr(f'Не удалось найти узел для станции {station.id()}: {str(e)}'))
+                continue
 
-        for i, obj_feature in enumerate(objects_layer.getFeatures()):
-            if feedback.isCanceled():
-                break
+        if len(station_nodes) == 0:
+            raise QgsProcessingException(self.tr('Не удалось найти узлы графа ни для одной станции'))
 
-            # Получение геометрии объекта
+        # Шаг 2: Подготовка данных объектов и нахождение их узлов
+        feedback.pushInfo(self.tr('Подготовка данных объектов...'))
+        objects_data = []
+        objects_nodes_set = set()
+        
+        for obj_feature in objects_layer.getFeatures():
             obj_geometry = obj_feature.geometry()
             if obj_geometry.isEmpty():
                 continue
@@ -247,76 +235,146 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
                 obj_point = obj_geometry.centroid().asPoint()
 
             obj_id = obj_feature.id()
-
-            # Узел графа для объекта
             obj_wgs = to_wgs.transform(obj_point.x(), obj_point.y())
+            
             try:
-                obj_node = nearest_nodes(G, obj_wgs.x(), obj_wgs.y())
+                obj_node = find_nearest_node(G, obj_wgs.x(), obj_wgs.y())
+                if obj_node is not None:
+                    objects_data.append({
+                        'feature': obj_feature,
+                        'geometry': obj_geometry,
+                        'id': obj_id,
+                        'node': obj_node
+                    })
+                    objects_nodes_set.add(obj_node)
             except Exception:
                 continue
 
-            # Подсчёт времени до всех станций по сети
-            station_distances = []
-            for station in fire_stations:
-                st_pt = station.geometry().asPoint()
-                st_wgs = to_wgs.transform(st_pt.x(), st_pt.y())
-                try:
-                    st_node = nearest_nodes(G, st_wgs.x(), st_wgs.y())
-                    route_nodes = nx.shortest_path(G, obj_node, st_node, weight='travel_time')
-                    t_min, total_len = sum_route_time_and_length(G, route_nodes)
-                    dist_km = total_len / 1000.0
-                except Exception:
-                    t_min = float('inf')
-                    dist_km = float('inf')
+        total_features = len(objects_data)
+        if total_features == 0:
+            raise QgsProcessingException(self.tr('Не найдено объектов для обработки'))
 
-                station_name = station[station_name_field] if station_name_field else f"Station_{station.id()}"
+        feedback.pushInfo(self.tr(f'Найдено {total_features} объектов и {len(station_nodes)} подразделений'))
 
-                station_distances.append({
-                    'station': station,
-                    'distance_km': dist_km,
-                    'response_time_min': t_min,
-                    'name': station_name
-                })
-
-            # Сортировка по времени прибытия
-            station_distances.sort(key=lambda x: x['response_time_min'])
-
-            # Выбор необходимого количества станций
-            selected_stations = station_distances[:required_stations]
+        # Шаг 3: Вычисление матрицы времени прибытия
+        feedback.pushInfo(self.tr('Вычисление матрицы времени прибытия...'))
+        arrival_times_matrix = {}  # {station_name: {node: time}}
+        
+        total_stations = len(station_nodes)
+        for idx, (station_name, station_node) in enumerate(station_nodes.items()):
+            if feedback.isCanceled():
+                break
+                
+            progress_pct = round(100 * idx / total_stations, 1)
+            feedback.pushInfo(self.tr(f'{progress_pct}% : {station_name}...'))
             
-            if len(selected_stations) == 0:
+            try:
+                # Вычисление кратчайших путей от станции ко всем узлам объектов
+                arrival_times = nx.shortest_path_length(
+                    G,
+                    source=station_node,
+                    weight='travel_time'
+                )
+                # Фильтруем только узлы объектов
+                arrival_times_filtered = {
+                    k: v for k, v in arrival_times.items() 
+                    if k in objects_nodes_set
+                }
+                arrival_times_matrix[station_name] = arrival_times_filtered
+                feedback.pushInfo(self.tr(f'{progress_pct}% : {station_name}... OK'))
+            except Exception as e:
+                feedback.reportError(self.tr(f'Ошибка при расчете для {station_name}: {str(e)}'))
+                arrival_times_matrix[station_name] = {}
+
+        # Шаг 4: Обработка объектов с использованием матрицы для всех рангов
+        feedback.pushInfo(self.tr('Обработка объектов с использованием матрицы времени прибытия для всех рангов...'))
+        
+        for i, obj_data in enumerate(objects_data):
+            if feedback.isCanceled():
+                break
+
+            obj_feature = obj_data['feature']
+            obj_geometry = obj_data['geometry']
+            obj_id = obj_data['id']
+            obj_node = obj_data['node']
+
+            # Получение времен прибытия для данного узла из всех станций
+            station_times = []
+            for station_name in station_nodes.keys():
+                if obj_node in arrival_times_matrix.get(station_name, {}):
+                    time_min = arrival_times_matrix[station_name][obj_node]
+                    station_times.append({
+                        'name': station_name,
+                        'response_time_min': time_min
+                    })
+
+            if len(station_times) == 0:
                 continue
 
-            # Расчет статистики
-            response_times = [s['response_time_min'] for s in selected_stations]
-            first_arrival = min(response_times)
-            last_arrival = max(response_times)
-            avg_arrival = sum(response_times) / len(response_times)
+            # Сортировка по времени прибытия
+            station_times.sort(key=lambda x: x['response_time_min'])
             
-            # Создание списка станций
-            station_list = "; ".join([f"{s['name']} ({s['response_time_min']:.1f}мин)" for s in selected_stations])
+            # Получаем все времена прибытия для расчетов
+            all_times = [s['response_time_min'] for s in station_times]
+
+            # Расчет статистики для каждого ранга
+            rank_results = {}
+            for rank_name, units_count in fire_ranks.items():
+                if len(station_times) < units_count:
+                    # Если доступных станций меньше, чем требуется для ранга
+                    selected_times = all_times
+                else:
+                    selected_times = all_times[:units_count]
+                
+                if len(selected_times) > 0:
+                    rank_results[rank_name] = {
+                        'min': min(selected_times),
+                        'max': max(selected_times),
+                        'avg': sum(selected_times) / len(selected_times)
+                    }
+                else:
+                    rank_results[rank_name] = {
+                        'min': float('inf'),
+                        'max': float('inf'),
+                        'avg': float('inf')
+                    }
+
+            # Расчет общих статистик (по минимальному времени из всех рангов)
+            all_min_times = [r['min'] for r in rank_results.values() if r['min'] != float('inf')]
+            all_max_times = [r['max'] for r in rank_results.values() if r['max'] != float('inf')]
+            all_avg_times = [r['avg'] for r in rank_results.values() if r['avg'] != float('inf')]
             
-            # Определение покрытия
-            if first_arrival <= 5:
-                coverage = "Отличное"
-            elif first_arrival <= 10:
-                coverage = "Хорошее"
-            elif first_arrival <= 20:
-                coverage = "Удовлетворительное"
-            else:
-                coverage = "Неудовлетворительное"
+            arrival_time_min = min(all_min_times) if all_min_times else float('inf')
+            arrival_time_max = max(all_max_times) if all_max_times else float('inf')
+            arrival_time_mean = sum(all_avg_times) / len(all_avg_times) if all_avg_times else float('inf')
 
             # Создание новой фичи
             new_feature = QgsFeature(fields)
             new_feature.setGeometry(obj_geometry)
             new_feature['object_id'] = obj_id
-            new_feature['fire_rank'] = fire_rank + 1
-            new_feature['total_stations'] = len(selected_stations)
-            new_feature['first_arrival_min'] = round(first_arrival, 1)
-            new_feature['last_arrival_min'] = round(last_arrival, 1)
-            new_feature['avg_arrival_min'] = round(avg_arrival, 1)
-            new_feature['station_list'] = station_list
-            new_feature['response_coverage'] = coverage
+            
+            # Заполнение полей для каждого ранга
+            for rank_name in fire_ranks.keys():
+                rank_data = rank_results[rank_name]
+                new_feature[f'{rank_name}_min'] = round(rank_data['min'], 1) if rank_data['min'] != float('inf') else None
+                new_feature[f'{rank_name}_max'] = round(rank_data['max'], 1) if rank_data['max'] != float('inf') else None
+                new_feature[f'{rank_name}_avg'] = round(rank_data['avg'], 1) if rank_data['avg'] != float('inf') else None
+            
+            # Общие поля
+            new_feature['arrival_time_min'] = round(arrival_time_min, 1) if arrival_time_min != float('inf') else None
+            new_feature['arrival_time_max'] = round(arrival_time_max, 1) if arrival_time_max != float('inf') else None
+            new_feature['arrival_time_mean'] = round(arrival_time_mean, 1) if arrival_time_mean != float('inf') else None
+            
+            # Оценка по среднему времени прибытия (сравнение с 10 минутами)
+            if arrival_time_mean != float('inf') and arrival_time_mean is not None:
+                if arrival_time_mean <= 10:
+                    evaluation = "удовлетворительно"
+                else:
+                    evaluation = "не удовлетворительно"
+            else:
+                evaluation = None
+            
+            new_feature['evaluation'] = evaluation
             
             sink.addFeature(new_feature)
 

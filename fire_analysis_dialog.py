@@ -8,7 +8,8 @@ from qgis.PyQt.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                                  QTextEdit, QTabWidget, QWidget, QGroupBox, QFormLayout,
                                  QMessageBox, QProgressBar)
 from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal
-from qgis.core import QgsProject, QgsVectorLayer, QgsProcessingContext, QgsTask, QgsProcessing
+from qgis.core import (QgsProject, QgsVectorLayer, QgsProcessingContext, QgsTask, 
+                       QgsProcessing, QgsProcessingFeedback, QgsProcessingException)
 from qgis.utils import iface
 import os
 
@@ -251,6 +252,7 @@ class FireAnalysisDialog(QDialog):
                 'OBJECTS_LAYER': objects_layer,
                 'FIRE_STATIONS_LAYER': stations_layer,
                 'ROAD_SPEEDS_KMH': speeds,
+                'USE_CACHE': 0,  # Использовать кеширование по умолчанию
                 'OUTPUT_LAYER': QgsProcessing.TEMPORARY_OUTPUT
             }
             
@@ -279,6 +281,7 @@ class FireAnalysisDialog(QDialog):
                 'OBJECTS_LAYER': objects_layer,
                 'FIRE_STATIONS_LAYER': stations_layer,
                 'ROAD_SPEEDS_KMH': speeds,
+                'USE_CACHE': 0,  # Использовать кеширование по умолчанию
                 'ROUTE_TYPE': route_type,
                 'TIME_THRESHOLD': time_threshold,
                 'OUTPUT_LAYER': QgsProcessing.TEMPORARY_OUTPUT
@@ -309,6 +312,7 @@ class FireAnalysisDialog(QDialog):
                 'OBJECTS_LAYER': objects_layer,
                 'FIRE_STATIONS_LAYER': stations_layer,
                 'ROAD_SPEEDS_KMH': speeds,
+                'USE_CACHE': 0,  # Использовать кеширование по умолчанию
                 'FIRE_RANK': fire_rank,
                 'MAX_STATIONS': max_stations,
                 'OUTPUT_LAYER': QgsProcessing.TEMPORARY_OUTPUT
@@ -323,27 +327,40 @@ class FireAnalysisDialog(QDialog):
     def run_processing_algorithm(self, algorithm, parameters):
         """Запуск алгоритма обработки"""
         context = QgsProcessingContext()
+        context.setProject(QgsProject.instance())
         feedback = self.create_feedback()
         
         self.progress_bar.setVisible(True)
         self.run_button.setEnabled(False)
         
         try:
-            result = algorithm.processAlgorithm(parameters, context, feedback)
+            # Используем правильный метод run() вместо прямого вызова processAlgorithm
+            result = algorithm.run(parameters, context, feedback)
             
-            # Получение выходного слоя из контекста по идентификатору результата
-            output_key = getattr(algorithm, 'OUTPUT_LAYER', None)
-            layer_id = result.get(output_key) if output_key else (next(iter(result.values()), None) if result else None)
-            layer = context.takeResultLayer(layer_id) if layer_id else None
-            if layer is not None and layer.isValid():
-                layer.setName(algorithm.displayName())
-                QgsProject.instance().addMapLayer(layer)
-                QMessageBox.information(self, "Успех", "Анализ завершен успешно!")
+            # Получение выходного слоя из результата
+            output_key = getattr(algorithm, 'OUTPUT_LAYER', 'OUTPUT_LAYER')
+            layer_id = result.get(output_key) if result else None
+            
+            if layer_id:
+                layer = context.getMapLayer(layer_id)
+                if layer is None:
+                    # Попробуем получить из проекта
+                    layer = QgsProject.instance().mapLayer(layer_id)
+                
+                if layer is not None and layer.isValid():
+                    layer.setName(algorithm.displayName())
+                    if layer not in QgsProject.instance().mapLayers().values():
+                        QgsProject.instance().addMapLayer(layer)
+                    QMessageBox.information(self, "Успех", "Анализ завершен успешно!")
+                else:
+                    QMessageBox.warning(self, "Ошибка", f"Не удалось получить выходной слой. ID: {layer_id}")
             else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось получить выходной слой")
+                QMessageBox.warning(self, "Ошибка", "Не удалось получить идентификатор выходного слоя")
                         
+        except QgsProcessingException as e:
+            QMessageBox.critical(self, "Ошибка обработки", f"Ошибка выполнения алгоритма: {str(e)}")
         except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Ошибка выполнения алгоритма: {str(e)}")
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {str(e)}")
         finally:
             self.progress_bar.setVisible(False)
             self.run_button.setEnabled(True)
