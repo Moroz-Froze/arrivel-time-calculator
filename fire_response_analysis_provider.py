@@ -9,6 +9,7 @@ import os
 from .algorithms.nearest_fire_station_algorithm import NearestFireStationAlgorithm
 from .algorithms.response_time_routes_algorithm import ResponseTimeRoutesAlgorithm
 from .algorithms.all_stations_response_algorithm import AllStationsResponseAlgorithm
+from .algorithms.arrival_time_matrix import ATM_Algorithm
 
 
 class FireResponseAnalysisProvider(QgsProcessingProvider):
@@ -38,6 +39,7 @@ class FireResponseAnalysisProvider(QgsProcessingProvider):
         self.addAlgorithm(NearestFireStationAlgorithm())
         self.addAlgorithm(ResponseTimeRoutesAlgorithm())
         self.addAlgorithm(AllStationsResponseAlgorithm())
+        self.addAlgorithm(ATM_Algorithm())
 
     def supportedOutputTableExtensions(self):
         """Поддерживаемые форматы таблиц"""

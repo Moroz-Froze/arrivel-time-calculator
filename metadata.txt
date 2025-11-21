@@ -3,7 +3,7 @@ name=Fire Response Time Analysis
 qgisMinimumVersion=3.16
 qgisMaximumVersion=3.99
 description=Анализ времени прибытия пожарных подразделений
-version=1.0.0
+version=1.0.1
 author=Fire Analysis Team
 email=fire@example.com
 
