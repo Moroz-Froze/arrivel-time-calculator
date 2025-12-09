@@ -298,15 +298,22 @@ class ATM_Algorithm(QgsProcessingAlgorithm):
             feedback.setProgress(40 + int(i * 55))
             i+=1
 
-
+        # Сбрасываем столбец с кодом узла
+        target_layer_gdf = target_layer_gdf.drop(columns=[DATA_NODE_FIELD])
 
 
         # 5. Сохраняем результаты
         feedback.setProgressText('Сохраняем изменения...')
         feedback.setProgress(95)
 
-        # Перепроецируем в СК исходной застройки
-        target_layer_gdf = ox.projection.project_gdf(target_layer_gdf, to_crs=target_layer.sourceCrs().authid())
+        # Перепроецируем в СК
+        if target_layer is not None:
+            # исходной застройки
+            target_layer_gdf = ox.projection.project_gdf(target_layer_gdf, to_crs=target_layer.sourceCrs().authid())
+        else:
+            # исходной дороги
+            target_layer_gdf = ox.projection.project_gdf(target_layer_gdf, to_crs=road_network_source.sourceCrs().authid())
+            
         
         # Сохраняем в итоговый слой
         target_layer_gdf.to_file(target_file)
