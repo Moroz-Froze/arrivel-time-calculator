@@ -197,51 +197,19 @@ class FirstArrivalUnitAlgorithm(QgsProcessingAlgorithm):
             crs=arrival_matrix_source.sourceCrs().authid()
         )
 
-        feedback.setProgress(20)
+        feedback.setProgress(80)
         feedback.setProgressText('Обработка матрицы прибытия...')
 
         # Определяем столбцы, содержащие времена прибытия
         units_names = list(units_gdf[units_name_field].unique())
 
-        # Для каждого объекта определяем первое прибывающее подразделение
-        first_units = []
-        first_times = []
+        # Вычисляем времена и подразделения
+        first_time = arrival_gdf[units_names].min(axis=1)
+        first_unit = arrival_gdf[units_names].idxmin(axis=1)
 
-        # Обработка с прогрессом
-        total_features = len(arrival_gdf)
-        step = max(1, total_features // 100)  # Обновляем прогресс каждые 1% или чаще
-
-        for idx, row in arrival_gdf.iterrows():
-            # Получаем значения времён прибытия для текущего объекта
-            arrival_times = row[units_names]
-
-            # Убираем значения NaN/None
-            valid_times = arrival_times.dropna()
-
-            if len(valid_times) > 0:
-                # Находим минимальное время прибытия
-                min_time = valid_times.min()
-                # Находим имя подразделения с минимальным временем
-                first_unit = valid_times.idxmin()
-            else:
-                # Если нет валидных значений, устанавливаем пустые значения
-                min_time = None
-                first_unit = None
-
-
-            first_units.append(first_unit)
-            first_times.append(min_time)
-
-            # Обновляем прогресс
-            if idx % step == 0:
-                progress = 40 + int((idx / total_features) * 55)
-                feedback.setProgress(progress)
-                if feedback.isCanceled():
-                    break
-
-        # Добавляем новые столбцы в GeoDataFrame
-        arrival_gdf['first_unit'] = first_units
-        arrival_gdf['first_time'] = first_times
+        # Присваиваем результаты новым столбцам
+        arrival_gdf['first_unit'] = first_unit
+        arrival_gdf['first_time'] = first_time
         feedback.pushDebugInfo('Добавлено поле "first_unit" содержащее название первого прибывшего подразделения')
         feedback.pushDebugInfo('Добавлено поле "first_time" содержащее время прибытия первого подразделения')
         feedback.pushDebugInfo('Поля времен прибытия подразделений удалены.')
