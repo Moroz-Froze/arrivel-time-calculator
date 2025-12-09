@@ -94,7 +94,7 @@ class ATM_Algorithm(QgsProcessingAlgorithm):
         """
         Возвращает название группы, к которой принадлежит этот алгоритм.
         """
-        return self.tr('Общие алгоритмы')
+        return self.tr('1. Общие алгоритмы')
 
     def groupId(self):
         """

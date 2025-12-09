@@ -77,7 +77,7 @@ class FirstArrivalUnitAlgorithm(QgsProcessingAlgorithm):
         """
         Возвращает название группы, к которой принадлежит этот алгоритм.
         """
-        return self.tr('Анализ прибытия')
+        return self.tr('2. Анализ прибытия')
 
     def groupId(self):
         """

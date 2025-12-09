@@ -3,11 +3,16 @@ name=Fire Response Time Analysis
 qgisMinimumVersion=3.16
 qgisMaximumVersion=3.99
 description=Анализ времени прибытия пожарных подразделений
-version=1.0.1
+version=1.1.0
 author=Fire Analysis Team
 email=fire@example.com
 
 about=Плагин для анализа времени прибытия пожарных подразделений. Включает оценку времени прибытия от существующих подразделений, создание векторных слоев маршрутов времени прибытия и анализ времени прибытия для всех подразделений с учетом различных рангов пожара.
+
+changelog=
+    1.1.0:
+    - Добавлен алгоритм расчета матрицы прибытия
+    - Добавлен алгоритм определения времени прибытия первого подразделения
 
 tracker=https://github.com/example/fire-analysis-plugin/issues
 repository=https://github.com/example/fire-analysis-plugin
