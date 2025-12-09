@@ -187,21 +187,12 @@ class ATM_Algorithm(QgsProcessingAlgorithm):
             optional=True
         ))
 
-
-
         # Итоговый слой зданий
         self.addParameter(QgsProcessingParameterFileDestination(
-                self.OUTPUT, self.tr('Застройка с временами прибытия'), 'файл Geopackage (*.gpkg)',
+                self.OUTPUT, self.tr('Матрица прибытия (Застройка с временами прибытия)'), 'файл Geopackage (*.gpkg)',
             ))
 
 
-
-
-
-        # Выходной слой
-        self.addParameter(QgsProcessingParameterFileDestination(
-                self.OUTPUT, self.tr('Выходной файл'), 'файл Geopackage (*.gpkg)',
-            ))
 
     def processAlgorithm(self, parameters, context, feedback):
         """
@@ -292,8 +283,6 @@ class ATM_Algorithm(QgsProcessingAlgorithm):
         feedback.setProgressText('Расчет времен прибытия подразделений пожарной охраны')
         
         # 2.1. Расчет ожидаемого времени прибытия подразделений
-        # times, nearest = FirstArrivalUnitState()(env=G, points=existed_units_dict)
-
         i = 0
         for node, unit_name in existed_units_dict.items():
             times = nx.single_source_dijkstra_path_length(G, node, weight=weight_field)
@@ -301,18 +290,13 @@ class ATM_Algorithm(QgsProcessingAlgorithm):
             times = times+DELAY_TIME
 
             # Сопоставляем здания с временем прибытия
-            target_layer_gdf = target_layer_gdf.merge(times, 
+            target_layer_gdf = target_layer_gdf.merge(times,
                                                     left_on=DATA_NODE_FIELD, 
                                                     right_index=True,
                                                     how='left')
             feedback.pushDebugInfo(f'Выполнен расчет для {unit_name}')
             feedback.setProgress(40 + int(i * 55))
             i+=1
-
-                                          
-
-
-
 
 
 
@@ -321,6 +305,9 @@ class ATM_Algorithm(QgsProcessingAlgorithm):
         feedback.setProgressText('Сохраняем изменения...')
         feedback.setProgress(95)
 
+        # Перепроецируем в СК исходной застройки
+        target_layer_gdf = ox.projection.project_gdf(target_layer_gdf, to_crs=target_layer.sourceCrs().authid())
+        
         # Сохраняем в итоговый слой
         target_layer_gdf.to_file(target_file)
 
