@@ -196,10 +196,52 @@ class AllStationsResponseAlgorithm(QgsProcessingAlgorithm):
             try:
                 importlib.import_module('osmnx')
             except Exception as e:
-                raise QgsProcessingException(
-                    self.tr("OSMnx недоступен и слой дорог не указан. "
-                           "Установите osmnx (pip install osmnx) или укажите слой дорожной сети.")
-                )
+                # Показываем диалог установки
+                import sys
+                import os
+                plugin_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                if plugin_dir not in sys.path:
+                    sys.path.insert(0, plugin_dir)
+                
+                try:
+                    from osmnx_checker import check_osmnx_available
+                    
+                    if not check_osmnx_available():
+                        # Показываем сообщение с направлением на меню плагинов
+                        from qgis.PyQt.QtWidgets import QMessageBox
+                        
+                        msg = QMessageBox()
+                        msg.setWindowTitle(self.tr("Библиотека OSMnx не установлена"))
+                        msg.setIcon(QMessageBox.Warning)
+                        msg.setText(
+                            self.tr("Для работы алгоритма необходима библиотека OSMnx, которая не установлена.\n\n")
+                            + self.tr("Для установки библиотеки:\n")
+                            + self.tr("1. Перейдите в меню: Модули → Fire Analysis → Установка библиотек (OSMnx)\n")
+                            + self.tr("2. Следуйте инструкциям в открывшемся окне\n\n")
+                            + self.tr("Или укажите слой дорожной сети в параметрах алгоритма.")
+                        )
+                        msg.setStandardButtons(QMessageBox.Ok)
+                        
+                        try:
+                            from qgis.utils import iface
+                            if iface:
+                                msg.setParent(iface.mainWindow())
+                        except:
+                            pass
+                        
+                        msg.exec_()
+                        
+                        if not check_osmnx_available():
+                            raise QgsProcessingException(
+                                self.tr("OSMnx недоступен и слой дорог не указан. "
+                                       "Установите osmnx через меню: Модули → Fire Analysis → Установка библиотек (OSMnx) "
+                                       "или укажите слой дорожной сети.")
+                            )
+                except ImportError:
+                    raise QgsProcessingException(
+                        self.tr("OSMnx недоступен и слой дорог не указан. "
+                               "Установите osmnx (pip install osmnx) или укажите слой дорожной сети.")
+                    )
             feedback.pushInfo(self.tr('Построение графа дорог OSM...'))
         
         try:

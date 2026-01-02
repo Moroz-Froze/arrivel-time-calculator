@@ -4,6 +4,8 @@ Fire Response Time Analysis Plugin
 """
 
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtWidgets import QAction
 from qgis.core import QgsApplication
 import os
 
@@ -32,13 +34,35 @@ class FireAnalysisPlugin:
 
         # Инициализация провайдера обработки
         self.provider = FireResponseAnalysisProvider()
+        
+        # Действие для меню плагинов
+        self.install_libs_action = None
 
     def initGui(self):
         """Создание меню и панели инструментов"""
         # Добавление провайдера обработки
         QgsApplication.processingRegistry().addProvider(self.provider)
+        
+        # Создание действия для установки библиотек в меню плагинов
+        self.install_libs_action = QAction(
+            QIcon(os.path.join(self.plugin_dir, 'icons', 'icon.png')),
+            u"Установка библиотек (OSMnx)",
+            self.iface.mainWindow())
+        
+        self.install_libs_action.triggered.connect(self.show_install_dialog)
+        self.iface.addPluginToMenu(u"&Fire Analysis", self.install_libs_action)
 
     def unload(self):
         """Удаление плагина"""
         # Удаление провайдера обработки
         QgsApplication.processingRegistry().removeProvider(self.provider)
+        
+        # Удаление действия из меню
+        if self.install_libs_action:
+            self.iface.removePluginMenu(u"&Fire Analysis", self.install_libs_action)
+            self.install_libs_action = None
+    
+    def show_install_dialog(self):
+        """Показывает диалог установки библиотек"""
+        from .osmnx_checker import show_osmnx_install_dialog
+        show_osmnx_install_dialog(self.iface, self.iface.mainWindow())
