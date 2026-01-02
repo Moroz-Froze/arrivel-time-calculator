@@ -32,6 +32,7 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
     # Константы параметров
     OBJECTS_LAYER = 'OBJECTS_LAYER'
     FIRE_STATIONS_LAYER = 'FIRE_STATIONS_LAYER'
+    ROAD_LAYER = 'ROAD_LAYER'
     ROAD_SPEEDS_KMH = 'ROAD_SPEEDS_KMH'
     USE_CACHE = 'USE_CACHE'
     ROUTE_TYPE = 'ROUTE_TYPE'
@@ -95,6 +96,16 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
             )
         )
 
+        # Опциональный слой дорог (если не указан, будет использован OSM)
+        self.addParameter(
+            QgsProcessingParameterVectorLayer(
+                self.ROAD_LAYER,
+                self.tr('Слой дорожной сети (опционально)'),
+                [QgsProcessing.TypeVectorLine],
+                optional=True
+            )
+        )
+
         # Поле с названием подразделения определяется автоматически при выполнении
 
         # Средняя скорость движения (км/ч)
@@ -149,6 +160,7 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
         # Получение параметров
         objects_layer = self.parameterAsVectorLayer(parameters, self.OBJECTS_LAYER, context)
         fire_stations_layer = self.parameterAsVectorLayer(parameters, self.FIRE_STATIONS_LAYER, context)
+        road_layer = self.parameterAsVectorLayer(parameters, self.ROAD_LAYER, context)
         speeds_kmh = parameters.get(self.ROAD_SPEEDS_KMH, DEFAULT_SPEEDS_KMH)
         if not isinstance(speeds_kmh, list) or len(speeds_kmh) != 5:
             speeds_kmh = DEFAULT_SPEEDS_KMH
@@ -181,20 +193,31 @@ class ResponseTimeRoutesAlgorithm(QgsProcessingAlgorithm):
         # Получение параметра кеширования
         use_cache = self.parameterAsInt(parameters, self.USE_CACHE, context) == 0
         
-        # Построение графа OSM и установка скоростей
+        # Построение графа дорог
+        if road_layer is not None:
+            feedback.pushInfo(self.tr('Построение графа из слоя дорог...'))
+        else:
+            # Проверка наличия osmnx только если слой дорог не указан
+            try:
+                importlib.import_module('osmnx')
+            except Exception as e:
+                raise QgsProcessingException(
+                    self.tr("OSMnx недоступен и слой дорог не указан. "
+                           "Установите osmnx (pip install osmnx) или укажите слой дорожной сети.")
+                )
+            feedback.pushInfo(self.tr('Построение графа дорог OSM...'))
+
         try:
-            importlib.import_module('osmnx')
-            import osmnx as ox  # noqa: F401
-        except Exception as e:
-            raise QgsProcessingException(self.tr(f"OSMnx недоступен: {str(e)}"))
-
-        feedback.pushInfo(self.tr('Построение графа дорог OSM...'))
-
-        G, to_wgs, from_wgs = build_graph_for_layers(
-            objects_layer, 
-            fire_stations_layer,
-            use_cache=use_cache
-        )
+            G, to_wgs, from_wgs = build_graph_for_layers(
+                objects_layer, 
+                fire_stations_layer,
+                buffer_m=500.0,
+                road_layer=road_layer,
+                use_cache=use_cache
+            )
+        except RuntimeError as e:
+            raise QgsProcessingException(self.tr(str(e)))
+        
         set_graph_travel_times(G, speeds_kmh, kmh_to_mm)
 
         # Подготовка данных станций

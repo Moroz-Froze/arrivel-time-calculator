@@ -4,9 +4,19 @@
 
 import os
 
-import geopandas as gpd
-import osmnx as ox
+try:
+    import geopandas as gpd
+    GPD_AVAILABLE = True
+except ImportError:
+    GPD_AVAILABLE = False
+    gpd = None
 
+try:
+    import osmnx as ox
+    OSMNX_AVAILABLE = True
+except ImportError:
+    OSMNX_AVAILABLE = False
+    ox = None
 
 from .algorithms.genesis.graphs.algorithms import graph_rise_from_gpkg
 
@@ -54,12 +64,22 @@ def get_graph_from_layer(pre_gds_file,
     """
     if check_file_exists(pre_gds_file):
         # Загружаем граф
+        if not OSMNX_AVAILABLE:
+            raise QgsProcessingException(
+                'Для загрузки предварительно скомпилированного графа необходим osmnx. '
+                'Установите osmnx или используйте слой дорог для построения графа.'
+            )
         feedback.pushDebugInfo('Используем предварительно скомпилированный ГДС')
         feedback.setProgressText('Загружаем граф дорожной сети')
         G = ox.load_graphml(pre_gds_file)
         roads_gdf = ox.graph_to_gdfs(G, nodes=False)
     else:
         # Формируем граф дорожной сети
+        if not GPD_AVAILABLE:
+            raise QgsProcessingException(
+                'Для построения графа из слоя дорог необходим geopandas. '
+                'Установите geopandas: pip install geopandas'
+            )
         feedback.setProgressText('Формируем граф дорожной сети')
 
         # Загружаем данные из слоя дорог
